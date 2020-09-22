@@ -1,0 +1,47 @@
+---
+- name: Remove Persistent directories
+  hosts: k8_master,k8_worker
+  gather_facts: false
+  become: yes
+  become_user: root
+  tasks:
+    - name: Remove /mnt/am-ac
+      file:
+        path: /mnt/am-ac
+        state: absent
+      register: output
+    - assert:
+        that: output.state == "absent"
+        fail_msg: "directory was not deleted successfully"
+        success_msg: "directory deleted successfully"
+
+    - name: Remove /mnt/am-edir
+      file:
+        path: /mnt/am-edir
+        state: absent
+      register: output
+    - assert:
+        that: output.state == "absent"
+        fail_msg: "directory was not deleted successfully"
+        success_msg: "directory deleted successfully"
+
+    - name: Remove /mnt/am-idp
+      file:
+        path: /mnt/am-idp
+        state: absent
+      register: output
+    - assert:
+        that: output.state == "absent"
+        fail_msg: "directory was not deleted successfully"
+        success_msg: "directory deleted successfully"
+
+    - name: Remove /mnt/am-ag
+      file:
+        path: /mnt/am-ag
+        state: absent
+      register: output
+    - assert:
+        that: output.state == "absent"
+        fail_msg: "directory was not deleted successfully"
+        success_msg: "directory deleted successfully"
+

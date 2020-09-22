@@ -1,0 +1,83 @@
+
+---
+- name: Install NAM Docker
+  hosts: k8_master
+  gather_facts: false
+  become: yes
+  become_user: root
+  vars:
+    namespace: "default"
+    adminConsoleIP: "localhost"
+    adminName: "admin"
+    adminPassword: "novell"
+    acNode: "default"
+    imageRepo: "security-accessmanager-docker.btpartifactory.swinfra.net"
+    helmRepoName: "access-manager-charts"
+    helmRepo: "https://btpartifactory.swinfra.net/artifactory/security-accessmanager-helm/"
+    chartVersion: "0.1.0"
+    kubeconfig: "/home/.kube/config"
+  tasks:
+    - name: helm repo add
+      shell: helm repo add "{{ helmRepoName }}"  "{{ helmRepo }}"
+      args:
+        executable: /bin/sh
+      register: output
+    - debug:
+        var: output.stdout
+
+    - name: helm repo list
+      shell: helm repo list
+      args:
+        executable: /bin/sh
+      register: output
+    - debug:
+        var: output.stdout
+
+    - name: helm repo update
+      shell: helm repo update
+      args:
+        executable: /bin/sh
+      register: output
+#    - debug:
+#        var: output.stdout
+    - assert:
+        that: output.stdout is search('.*Successfully got an update.*')
+        fail_msg: "Helm Repo was not updated successfully"
+        success_msg: "Helm Repo got updated successfully"
+
+    - name: helm pull charts
+      shell: helm pull --untar --version "{{ chartVersion }}" "{{ helmRepoName }}"/access-manager
+      args:
+        chdir: /tmp
+        executable: /bin/sh
+      register: output
+    - assert:
+        that: output.rc == 0
+        fail_msg: "Helm Charts not pulled successfully"
+        success_msg: "Helm Charts pulled successfully"
+
+    - name: helm install
+      shell: helm install -n "{{ namespace }}" access-manager access-manager --set global.amconfig.adminConsoleIP="{{ adminConsoleIP }}" --set global.amsecret.adminName="{{ adminName }}" --set global.amsecret.adminPassword="{{ adminPassword }}" --set am-ac.node="{{ acNode }}" --set global.image.repository="{{ imageRepo }}" --kubeconfig="{{ kubeconfig }}"
+      args:
+        chdir: /tmp
+        executable: /bin/sh
+      register: output
+#    - debug:
+#        var: output.stdout
+    - assert:
+        that: 
+          - output.rc == 0
+          - output.stdout is search(".*access the Admin Console.*")
+        fail_msg: "NAM Docker deployment failed"
+        success_msg: "NAM Docker deployment is successful"
+
+    - name: Validate pods,pv,pvc,statefulset are created in the namespace
+      shell: kubectl get pods,pv,pvc,statefulset -n "{{ namespace }}" --kubeconfig="{{ kubeconfig }}"
+      register: output
+    - debug:
+        var: output.stdout_lines
+    - assert:
+        that: 
+          - output.rc == 0
+        fail_msg: "All kubernetes resources not found in namespace"
+        success_msg: "All kubernetes resources created in namespace"

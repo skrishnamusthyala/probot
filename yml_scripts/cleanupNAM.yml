@@ -1,0 +1,141 @@
+
+---
+- name: Uninstall Access Manager deployment and perform cleanup
+  hosts: k8_master
+  gather_facts: false
+  become: yes
+  become_user: root
+  vars:
+    kubeconfig: "/home/.kube/config"
+    namespace: "default"
+  tasks:
+    - name: Uninstall helm deployment
+      shell: helm uninstall --namespace "{{ namespace }}" access-manager --kubeconfig="{{ kubeconfig }}"
+      args:
+        chdir: /tmp
+        executable: /bin/sh
+      register: output
+#    - debug:
+#        var: output
+    - assert:
+        that: 
+          - output.rc == 0
+          - output.stdout is search(".*release.*uninstalled.*")
+        fail_msg: "Deployment uninstallation failed"
+        success_msg: "Deployment got uninstalled successfully"
+
+    - name: Delete admin-credentials
+      shell: kubectl delete --namespace="{{ namespace }}" secret admin-credentials --kubeconfig="{{ kubeconfig }}"
+      args:
+        executable: /bin/sh
+      register: output
+#    - debug:
+#        var: output
+    - assert:
+        that: 
+          - output.rc == 0
+          - output.stdout is search(".*deleted.*")
+        fail_msg: "admin-credentials deletion is failed"
+        success_msg: "admin-credentials deleted successfully"
+
+    - name: Delete am-config
+      shell: kubectl delete --namespace="{{ namespace }}" configmap am-config --kubeconfig="{{ kubeconfig }}"
+      args:
+        executable: /bin/sh
+      register: output
+#    - debug:
+#        var: output
+    - assert:
+        that:
+          - output.rc == 0
+          - output.stdout is search(".*deleted.*")
+        fail_msg: "am-config deletion is failed"
+        success_msg: "am-config deletion is successful"
+
+    - name: Get PVC names to be deleted
+      shell: kubectl get pvc -n "{{ namespace }}" --kubeconfig="{{ kubeconfig }}" | awk '{if(NR>1)print}' | cut -d" " -f1
+      args:
+        executable: /bin/sh
+      register: output
+#    - debug: 
+#        var: output
+
+    - set_fact:
+        pvc_list: "{{ output.stdout_lines }}"
+     
+    - name: Delete PVC
+      shell: kubectl delete pvc -n "{{ namespace }}" --kubeconfig="{{ kubeconfig }}"  "{{ item }}"
+      args:
+        executable: /bin/sh
+      with_items: 
+        - "{{ pvc_list }}"
+#      register: output
+#    - debug:
+#        var: output
+
+    - pause:
+        seconds: 6
+ 
+    - name: Check if PVC got deleted from given namespace
+      shell: kubectl get pvc -n "{{ namespace }}" --kubeconfig="{{ kubeconfig }}"
+      args:
+        executable: /bin/sh
+      register: output 
+    - assert:
+        that:
+          - output.stderr is search("No resources found in.*")
+        fail_msg: "PVC deletion is failed"
+        success_msg: "PVC deletion is successful"
+  
+    - name: get PV to be deleted
+      shell: kubectl get pv -n "{{ namespace }}" --kubeconfig="{{ kubeconfig }}" | grep automation | awk '{print $1}'
+      args:
+        executable: /bin/sh
+      register: output
+#    - debug: 
+#        var: output
+
+    - set_fact:
+        pv_list: "{{ output.stdout_lines }}"
+     
+    - name: Delete PV
+      shell: kubectl delete pv -n "{{ namespace }}" --kubeconfig="{{ kubeconfig }}"  "{{ item }}"
+      args:
+        executable: /bin/sh
+      with_items: 
+        - "{{ pv_list }}"
+      register: output
+#    - debug:
+#        var: output
+
+    - name: Check if PV got deleted
+      shell: kubectl get pv -n "{{ namespace }}" --kubeconfig="{{ kubeconfig }}"
+      args:
+        executable: /bin/sh
+      register: output
+    - assert:
+        that:
+          - output.stderr is search("No resources found in.*")
+        fail_msg: "PVC deletion is failed"
+        success_msg: "PV deletion is successful"
+
+    - name: Remove /tmp/access-manager
+      file: 
+        path: /tmp/access-manager
+        state: absent
+      register: output
+    - assert:
+        that: output.state == "absent"
+        fail_msg: "directory was not deleted successfully"
+        success_msg: "/tmp/access-manager directory deleted successfully"
+
+
+    - name: Validate no resources are present in the namespace
+      shell: kubectl get pods,pv,pvc,statefulset -n "{{ namespace }}" --kubeconfig="{{ kubeconfig }}"
+      register: output
+#    - debug:
+#        var: output.stdout_lines
+    - assert:
+        that: output.stderr is search("No resources found in.*")
+        fail_msg: "All resources are not removed from namespace"
+        success_msg: "No resources found in namespace"

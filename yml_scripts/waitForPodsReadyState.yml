@@ -1,0 +1,54 @@
+---
+- name: Wait for AC Pod to be in 'Ready' state
+  hosts: k8_master
+  gather_facts: false
+  vars:
+    namespace: "automation"
+  tasks:
+    - name: Waiting for AC Pod Readiness
+      shell: kubectl wait --for=condition=Ready pod/access-manager-am-ac-0 --timeout=720s -n "{{ namespace }}"|awk '{print $3}'
+      register: output
+    - assert:
+        that: output.stdout is match("met")
+        fail_msg: "AC Pod is not in 'Ready' state"
+        success_msg: "AC Pod is in 'Ready' state"
+    - name: Get test case count
+      shell: 
+        cmd: echo "AC Pod- PASSED" > /tmp/test_count.txt
+      when: output.stdout is match("met")
+
+    - name: Waiting for IDP Pod Readiness
+      shell: kubectl wait --for=condition=Ready pod/access-manager-am-idp-0 --timeout=600s -n "{{ namespace }}"|awk '{print $3}'
+      register: output
+    - assert:
+        that: output.stdout is match("met")
+        fail_msg: "IDP Pod is not in 'Ready' state"
+        success_msg: "IDP Pod is in 'Ready' state"
+    - name: Get test case count
+      shell:
+        cmd: echo "IDP Pod- PASSED" >> /tmp/test_count.txt
+      when: output.stdout is match("met")
+
+    - name: Waiting for AG Pod Readiness
+      shell: kubectl wait --for=condition=Ready pod/access-manager-am-ag-0 --timeout=900s -n "{{ namespace }}"|awk '{print $3}'
+      register: output
+    - assert:
+        that: output.stdout is match("met")
+        fail_msg: "AG Pod is not in 'Ready' state"
+        success_msg: "AG Pod is in 'Ready' state"
+    - name: Get test case count
+      shell:
+        cmd: echo "AG Pod- PASSED" >> /tmp/test_count.txt
+      when: output.stdout is match("met")
+
+    - name: Result
+      shell: 
+        cmd: wc -l < /tmp/test_count.txt
+      register: output
+    - debug:
+        msg: Total Pods Ready - {{ output.stdout }}/3
+
+    - name: cleanup automation files
+      file:
+        path: /tmp/test_count.txt
+        state: absent 

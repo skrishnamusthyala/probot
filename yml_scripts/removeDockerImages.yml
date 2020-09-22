@@ -1,0 +1,30 @@
+---
+- name: Remove Docker images
+  hosts: k8_master,k8_worker
+  gather_facts: false
+  tasks:
+    - name: Get AM docker image list to be deleted
+      shell: docker images | grep am- | awk '{print $3}'
+      register: output
+
+    - set_fact:
+        image_list: "{{ output.stdout_lines }}"
+
+    - name: Execute docker rmi command
+      shell: docker rmi "{{ item }}"
+      with_items:
+        - "{{ image_list }}"
+#      register: output
+#    - debug:
+#        var: output
+ 
+    - name: Check No AM docker images are present
+      shell: docker images | grep am- | awk '{print $3}'
+      register: output
+#    - debug:
+#        var: output         
+    - assert:
+        that: output.stdout == ""
+        fail_msg: "AM docker image deletion failed"
+        success_msg: "All AM docker images are deleted successfully"
+        

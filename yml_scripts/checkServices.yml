@@ -1,0 +1,70 @@
+---
+- name: Check NAM service status
+  hosts: k8_master
+  gather_facts: false
+  vars:
+    namespace: "default"
+  tasks:
+    - name: AC service check
+      command: kubectl exec access-manager-am-ac-0 -c am-ac -n "{{ namespace }}" -- /etc/init.d/novell-ac status
+      register: output
+      ignore_errors: true
+
+    - assert:
+        that: output.stdout is search(".*running.*")
+        success_msg: "AC service is up and running"
+        fail_msg: "AC service is down"
+      ignore_errors: true
+      
+    - name: Get test case count
+      shell: 
+        cmd: echo "AC service- PASSED" > /tmp/test_count.txt
+      when: output.stdout is search(".*running.*")
+
+    - name: IDP service check
+      command: kubectl exec access-manager-am-idp-0 -c am-idp -n "{{ namespace }}" -- /etc/init.d/novell-idp status
+      register: output
+      ignore_errors: true
+
+    - assert:
+        that: output.stdout is search(".*running.*")
+        success_msg: "IDP service is up and running"
+        fail_msg: "IDP service is down"
+      ignore_errors: true
+
+    - name: Get test case count
+      shell:
+        cmd: echo "IDP service- PASSED" >> /tmp/test_count.txt
+      when: output.stdout is search(".*running.*")
+
+#   - name: Add JCC service check. when systemd for JCC is available.
+
+    - name: AG service check
+      command: kubectl exec access-manager-am-ag-0 -c am-ag -n "{{ namespace }}" -- /etc/init.d/novell-mag status
+      register: output
+      ignore_errors: true
+
+    - assert:
+        that: output.stdout is search(".*running.*")
+        success_msg: "AG service is up and running"
+        fail_msg: "AG service is down"
+      ignore_errors: true
+
+    - name: Get test case count
+      shell:
+        cmd: echo "AG service- PASSED" >> /tmp/test_count.txt
+      when: output.stdout is search(".*running.*")
+
+#   - name: Add JCC service check. when systemd for JCC is available.
+    
+    - name: Result
+      shell: 
+        cmd: wc -l < /tmp/test_count.txt
+      register: output
+    - debug:
+        msg: Total test cases passed - {{ output.stdout }}/3
+
+    - name: cleanup automation files
+      file:
+        path: /tmp/test_count.txt
+        state: absent 
